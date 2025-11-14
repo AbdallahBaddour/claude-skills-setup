@@ -1,0 +1,20 @@
+{
+  "github_repos": [
+    {
+      "repo": "ComposioHQ/awesome-claude-skills",
+      "branch": "master",
+      "skills": [
+        "changelog-generator"
+      ]
+    },
+    {
+      "repo": "obra/superpowers",
+      "branch": "main",
+      "skills": [
+        "skills/root-cause-tracing",
+        "skills/test-driven-development"
+      ]
+    }
+  ]
+}
+

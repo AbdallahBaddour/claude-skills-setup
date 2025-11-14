@@ -1,0 +1,6 @@
+# By default, all skills in this directory are tracked and can be shared with the team
+# To keep a skill private/local (not tracked by git), add it below:
+
+# Example:
+# my-private-skill/
+

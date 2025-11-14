@@ -1,0 +1,5 @@
+# VS Code MCP configuration
+.vscode/mcp.json
+
+# Skills temporary files
+claude-skills/.DS_Store
