@@ -12,12 +12,13 @@ cd claude-skills-setup
 This will:
 1. Create `~/.skillz` directory
 2. Download skills from GitHub repositories (specified in `skills-config.json`)
-3. Copy local skills from the `skills/` directory
-4. Create/update `.vscode/mcp.json` in your project root
+3. Copy custom skills from the `skills/` directory
+4. Configure Skillz MCP server using VS Code CLI (or create `.vscode/mcp.json` if CLI unavailable)
 
 ## Prerequisites
 
 - [uv](https://github.com/astral-sh/uv) installed (for running `uvx`)
+- VS Code installed (the script uses VS Code CLI to configure MCP)
 - Bash shell (Git Bash/WSL for Windows, native shell for macOS/Linux)
 - Git (for downloading skills from GitHub)
 
@@ -50,9 +51,9 @@ Download skills from GitHub repositories by configuring `skills-config.json`:
 }
 ```
 
-### 2. Local Skills
+### 2. Custom Skills
 
-Add your custom skills to the `skills/` directory:
+Create your own team-specific skills and add them to the `skills/` directory:
 
 ```
 claude-skills-setup/
@@ -66,7 +67,21 @@ claude-skills-setup/
 
 These will be automatically copied to `~/.skillz/` when you run the setup.
 
-See `skills/skill-creator` for detailed instructions on creating local skills.
+#### Creating Custom Skills
+
+**Using the Skill Creator (Recommended):**
+
+After running the setup, use the included `skill-creator` skill via Copilot:
+
+1. In VS Code, ask Copilot: "Use skill-creator to create a new skill for [your use case]"
+2. Follow the interactive prompts to define your skill
+3. The skill will be generated with proper structure and formatting
+4. Save it to the `skills/` directory
+5. Run `./setup-skillz.sh` to install it
+
+**Manual Creation:**
+
+See `skills/skill-creator/SKILL.md` for detailed instructions and templates.
 
 ## Usage
 
@@ -88,8 +103,8 @@ cd claude-skills-setup
 
 This will:
 - Update all GitHub-based skills to the latest versions
-- Copy any new/updated local skills
-- Preserve your MCP configuration
+- Copy any new/updated custom skills
+- Automatically detect and skip MCP configuration if Skillz is already configured
 
 ### Activate in VS Code
 
@@ -110,12 +125,13 @@ After running setup:
   - **`branch`**: Branch to clone from (defaults to `main`)
   - **`skills`**: Array of skill paths to download
 
-### Local Skills (`skills/` directory)
+### Custom Skills (`skills/` directory)
 
 - Each skill must be in its own subdirectory
-- Each skill must have a `SKILL.md` file
+- Each skill must have a `SKILL.md` file with frontmatter (name, description)
 - Skills can include additional files and scripts
-- See `skills/skill-creator` for more details
+- Use the `skill-creator` skill via Copilot for guided creation
+- See `skills/skill-creator/SKILL.md` for manual creation details
 
 ## Project Structure
 
@@ -125,7 +141,8 @@ your-project/
 │   ├── setup-skillz.sh
 │   ├── skills-config.json
 │   ├── skills/
-│   │   └── [your local skills]
+│   │   ├── skill-creator/      # Helper skill for creating new skills
+│   │   └── [your custom skills]
 │   └── README.md (this file)
 ├── .vscode/
 │   └── mcp.json (created by script)
@@ -137,15 +154,20 @@ your-project/
 1. **Find Project Root**: Searches for `.git` directory or uses parent of script directory
 2. **Create Skills Directory**: Creates `~/.skillz/` if it doesn't exist
 3. **Download GitHub Skills**: Clones repositories and copies specified skills
-4. **Copy Local Skills**: Copies all skills from `skills/` directory
-5. **Configure MCP**: Creates or merges `.vscode/mcp.json` with Skillz configuration
+4. **Copy Custom Skills**: Copies all skills from `skills/` directory (including skill-creator)
+5. **Configure MCP**: Uses VS Code CLI (`code --add-mcp`) to add Skillz server
+   - Automatically merges with existing MCP servers
+   - Falls back to manual file creation if CLI is unavailable
 
 ## Team Workflow
 
 ### For the Team Lead
 
 1. Configure `skills-config.json` with required GitHub skills
-2. Add any custom skills to `skills/` directory
+2. Create custom skills:
+   - Run the setup first to install skill-creator
+   - Ask Copilot: "Use skill-creator to create a skill for [use case]"
+   - Save generated skills to `skills/` directory
 3. Commit to repository
 4. Share with team
 
@@ -169,19 +191,36 @@ When skills are updated:
 - **uvx not found**: Install uv from https://github.com/astral-sh/uv
 - **Permission errors**: Check write access to `~/.skillz`
 - **Script won't run on Windows**: Use Git Bash or WSL, not PowerShell
-- **MCP config issues**: Check that `.vscode/mcp.json` exists in project root
+- **VS Code CLI not found**: 
+  - Make sure VS Code is installed and accessible via `code` command
+  - On Windows: Ensure "Add to PATH" was selected during VS Code installation
+  - Alternatively: The script will create `mcp.json` manually for new setups
+- **MCP config issues**: 
+  - If you have existing MCP servers and `code` CLI isn't available, manually add Skillz to your `.vscode/mcp.json`:
+    ```json
+    "skillz": {
+      "command": "uvx",
+      "args": ["skillz@latest"]
+    }
+    ```
 - **GitHub download fails**: 
   - Verify Git is installed
   - Check repository and branch names
   - Ensure skill paths are correct (case-sensitive)
-- **Local skills not copied**: Ensure each skill has a `SKILL.md` file
+- **Custom skills not copied**: Ensure each skill has a `SKILL.md` file with proper frontmatter
 
 ## Advanced
 
 ### Manual MCP Configuration
 
-If you need to manually configure MCP, create `.vscode/mcp.json`:
+The setup script uses VS Code CLI to configure MCP automatically. If you need to do it manually:
 
+**Using VS Code CLI:**
+```bash
+code --add-mcp "{\"name\":\"skillz\",\"command\":\"uvx\",\"args\":[\"skillz@latest\"]}"
+```
+
+**Or create `.vscode/mcp.json` manually:**
 ```json
 {
   "servers": {
@@ -195,9 +234,11 @@ If you need to manually configure MCP, create `.vscode/mcp.json`:
 
 ### Skill Priority
 
-If a skill exists in both GitHub and local directories with the same name:
-- Local skills are copied **after** GitHub skills
-- Local skills will override GitHub skills
+If a skill exists in both GitHub and custom directories with the same name:
+- Custom skills are copied **after** GitHub skills
+- Custom skills will override GitHub skills
+
+This allows you to customize or extend GitHub skills for your team's specific needs.
 
 ## References
 

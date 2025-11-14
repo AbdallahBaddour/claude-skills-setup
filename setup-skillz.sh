@@ -272,51 +272,39 @@ if [ -d "$LOCAL_SKILLS_DIR" ]; then
 fi
 
 # Setup VS Code MCP configuration
-VSCODE_DIR="$REPO_ROOT/.vscode"
-mkdir -p "$VSCODE_DIR"
+echo ""
+echo "Configuring Skillz MCP server..."
 
-MCP_CONFIG_PATH="$VSCODE_DIR/mcp.json"
-
-# Check if mcp.json already exists
-if [ -f "$MCP_CONFIG_PATH" ]; then
-    echo ""
-    echo "MCP configuration found: $MCP_CONFIG_PATH"
-    
+# Check if VS Code CLI is available
+if command -v code &> /dev/null; then
     # Check if skillz is already configured
-    if grep -q '"skillz"' "$MCP_CONFIG_PATH" 2>/dev/null; then
-        echo "Skillz is already configured"
+    VSCODE_DIR="$REPO_ROOT/.vscode"
+    MCP_CONFIG_PATH="$VSCODE_DIR/mcp.json"
+    
+    if [ -f "$MCP_CONFIG_PATH" ] && grep -q '"skillz"' "$MCP_CONFIG_PATH" 2>/dev/null; then
+        echo "Skillz MCP server is already configured"
     else
-        # Check if servers section exists
-        if grep -q '"servers"' "$MCP_CONFIG_PATH" 2>/dev/null; then
-            # Merge into existing servers object
-            echo "Adding Skillz to existing MCP configuration..."
-            
-            # Find the closing brace of servers and insert before it
-            sed -i.bak '/"servers"[[:space:]]*:[[:space:]]*{/,/^[[:space:]]*}/{
-                /^[[:space:]]*}[[:space:]]*$/i\    ,\n    "skillz": {\n      "command": "uvx",\n      "args": ["skillz@latest"]\n    }
-            }' "$MCP_CONFIG_PATH"
-            
-            # Clean up: remove the extra comma if skillz is the first server
-            sed -i.bak 's/"servers"[[:space:]]*:[[:space:]]*{[[:space:]]*,/"servers": {/' "$MCP_CONFIG_PATH"
-            
-            rm -f "${MCP_CONFIG_PATH}.bak"
-            echo "Added Skillz to MCP configuration"
+        # Use VS Code CLI to add the MCP server
+        echo "Adding Skillz MCP server using VS Code CLI..."
+        if code --add-mcp "{\"name\":\"skillz\",\"command\":\"uvx\",\"args\":[\"skillz@latest\"]}" 2>/dev/null; then
+            echo "Successfully added Skillz MCP server"
         else
-            echo "WARNING: Please manually add Skillz to your MCP configuration:"
-            echo ""
-            echo '  "servers": {'
-            echo '    "skillz": {'
-            echo '      "command": "uvx",'
-            echo '      "args": ["skillz@latest"]'
-            echo '    }'
-            echo '  }'
-            echo ""
-            echo "Add it to $MCP_CONFIG_PATH"
-        fi
-    fi
-else
-    # Create new mcp.json with correct format
-    cat > "$MCP_CONFIG_PATH" << 'EOF'
+            echo "Note: VS Code CLI method failed, creating config file manually..."
+            
+            # Fallback: Create .vscode directory and mcp.json manually
+            mkdir -p "$VSCODE_DIR"
+            
+            if [ -f "$MCP_CONFIG_PATH" ]; then
+                echo "MCP configuration exists at: $MCP_CONFIG_PATH"
+                echo "Please manually add Skillz server to your mcp.json:"
+                echo ""
+                echo '  "skillz": {'
+                echo '    "command": "uvx",'
+                echo '    "args": ["skillz@latest"]'
+                echo '  }'
+            else
+                # Create new mcp.json
+                cat > "$MCP_CONFIG_PATH" << 'EOF'
 {
   "servers": {
     "skillz": {
@@ -326,8 +314,43 @@ else
   }
 }
 EOF
-    echo ""
-    echo "Created MCP configuration: $MCP_CONFIG_PATH"
+                echo "Created MCP configuration: $MCP_CONFIG_PATH"
+            fi
+        fi
+    fi
+else
+    # VS Code CLI not available, fall back to manual file creation
+    echo "VS Code CLI not found, creating config file manually..."
+    VSCODE_DIR="$REPO_ROOT/.vscode"
+    MCP_CONFIG_PATH="$VSCODE_DIR/mcp.json"
+    mkdir -p "$VSCODE_DIR"
+    
+    if [ -f "$MCP_CONFIG_PATH" ]; then
+        if grep -q '"skillz"' "$MCP_CONFIG_PATH" 2>/dev/null; then
+            echo "Skillz is already configured in: $MCP_CONFIG_PATH"
+        else
+            echo "MCP configuration exists at: $MCP_CONFIG_PATH"
+            echo "Please manually add Skillz server to the 'servers' section:"
+            echo ""
+            echo '  "skillz": {'
+            echo '    "command": "uvx",'
+            echo '    "args": ["skillz@latest"]'
+            echo '  }'
+        fi
+    else
+        # Create new mcp.json
+        cat > "$MCP_CONFIG_PATH" << 'EOF'
+{
+  "servers": {
+    "skillz": {
+      "command": "uvx",
+      "args": ["skillz@latest"]
+    }
+  }
+}
+EOF
+        echo "Created MCP configuration: $MCP_CONFIG_PATH"
+    fi
 fi
 
 echo ""
@@ -342,4 +365,3 @@ echo "  4. Click on start server option"
 echo ""
 echo "Press Enter to exit..."
 read
-
