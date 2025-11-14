@@ -271,6 +271,67 @@ if [ -d "$LOCAL_SKILLS_DIR" ]; then
     fi
 fi
 
+# Check for uvx and install if needed
+echo ""
+echo "Checking for uvx..."
+
+if command -v uvx &> /dev/null; then
+    echo "uvx is already installed"
+else
+    echo "uvx not found. Installing uv (which includes uvx)..."
+    echo ""
+    
+    # Detect platform and install uv
+    if [ -n "$USERPROFILE" ]; then
+        # Windows (Git Bash)
+        echo "Detected Windows environment"
+        echo "Installing uv using PowerShell installer..."
+        powershell -Command "irm https://astral.sh/uv/install.ps1 | iex"
+        install_result=$?
+    else
+        # Unix/macOS
+        echo "Detected Unix/macOS environment"
+        echo "Installing uv using shell installer..."
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        install_result=$?
+    fi
+    
+    if [ $install_result -eq 0 ]; then
+        echo ""
+        echo "✓ uv installed successfully"
+        
+        # Add uv to PATH for current session if needed
+        if [ -d "$HOME/.cargo/bin" ] && [[ ":$PATH:" != *":$HOME/.cargo/bin:"* ]]; then
+            export PATH="$HOME/.cargo/bin:$PATH"
+            echo "Added $HOME/.cargo/bin to PATH for this session"
+        fi
+        
+        # Verify uvx is now available
+        if command -v uvx &> /dev/null; then
+            echo "✓ uvx is now available"
+        else
+            echo "WARNING: uvx was installed but is not in PATH"
+            echo "You may need to restart your terminal or add ~/.cargo/bin to your PATH"
+            echo ""
+            echo "Add this to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
+            echo '  export PATH="$HOME/.cargo/bin:$PATH"'
+        fi
+    else
+        echo "ERROR: Failed to install uv"
+        echo ""
+        echo "Please install uv manually:"
+        echo "  Visit: https://docs.astral.sh/uv/getting-started/installation/"
+        echo ""
+        echo "Or run one of these commands:"
+        if [ -n "$USERPROFILE" ]; then
+            echo "  PowerShell: irm https://astral.sh/uv/install.ps1 | iex"
+        else
+            echo "  curl -LsSf https://astral.sh/uv/install.sh | sh"
+        fi
+        echo ""
+    fi
+fi
+
 # Setup VS Code MCP configuration
 echo ""
 echo "Configuring Skillz MCP server..."
