@@ -17,7 +17,7 @@ This will:
 
 ## Prerequisites
 
-- [uv](https://github.com/astral-sh/uv) installed (for running `uvx`)
+- [uv](https://github.com/astral-sh/uv) (for running `uvx`) - **will be installed automatically by the script if not present**
 - VS Code installed (the script uses VS Code CLI to configure MCP)
 - Bash shell (Git Bash/WSL for Windows, native shell for macOS/Linux)
 - Git (for downloading skills from GitHub)

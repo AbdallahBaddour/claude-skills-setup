@@ -6,7 +6,11 @@ echo ""
 
 # Find the repo root (where .git exists or parent of script directory)
 find_repo_root() {
-    local dir="$1"
+    local script_dir="$1"
+    # Start searching from the parent directory of the script
+    # This ensures we skip any .git folder within claude-skills-setup itself
+    local dir="$(dirname "$script_dir")"
+    
     while [ "$dir" != "/" ]; do
         if [ -d "$dir/.git" ]; then
             echo "$dir"
@@ -14,9 +18,9 @@ find_repo_root() {
         fi
         dir=$(dirname "$dir")
     done
+    
     # If no .git found, use the parent directory of the script
     # (assuming script is in a subdirectory like claude-skills-setup/)
-    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     echo "$(dirname "$script_dir")"
 }
 
