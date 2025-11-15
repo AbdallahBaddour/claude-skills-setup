@@ -275,7 +275,27 @@ fi
 echo ""
 echo "Checking for uvx..."
 
+UVX_FOUND=false
 if command -v uvx &> /dev/null; then
+    UVX_FOUND=true
+elif [ -n "$USERPROFILE" ]; then
+    # On Windows, check if uvx.exe exists at expected location
+    WIN_USERPROFILE=$(powershell -Command "[Environment]::GetFolderPath('UserProfile')" 2>/dev/null | tr -d '\r\n')
+    if [ -n "$WIN_USERPROFILE" ]; then
+        UVX_WIN_PATH="${WIN_USERPROFILE}\\.local\\bin\\uvx.exe"
+        UVX_EXISTS=$(powershell -Command "Test-Path '$UVX_WIN_PATH'" 2>/dev/null | tr -d '\r\n')
+        if [ "$UVX_EXISTS" = "True" ]; then
+            UVX_FOUND=true
+        fi
+    fi
+else
+    # On Unix/macOS, check if uvx exists at expected location (~/.cargo/bin/uvx)
+    if [ -f "$HOME/.cargo/bin/uvx" ]; then
+        UVX_FOUND=true
+    fi
+fi
+
+if [ "$UVX_FOUND" = true ]; then
     echo "uvx is already installed"
 else
     echo "uvx not found. Installing uv (which includes uvx)..."
@@ -286,6 +306,31 @@ else
         # Windows (Git Bash)
         echo "Detected Windows environment"
         echo "Installing uv using PowerShell installer..."
+        
+        # Check and set execution policy if needed
+        echo "Checking PowerShell execution policy..."
+        current_policy=$(powershell -Command "Get-ExecutionPolicy -Scope CurrentUser" 2>/dev/null)
+        
+        # Check if policy needs to be changed
+        if [ -n "$current_policy" ]; then
+            case "$current_policy" in
+                Unrestricted|RemoteSigned|Bypass)
+                    echo "Execution policy is already set to: $current_policy"
+                    ;;
+                *)
+                    echo "Setting execution policy to RemoteSigned (required for uv installation)..."
+                    powershell -Command "Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force" 2>/dev/null
+                    policy_result=$?
+                    if [ $policy_result -ne 0 ]; then
+                        echo "WARNING: Could not set execution policy automatically"
+                        echo "Please run this command manually:"
+                        echo "  Set-ExecutionPolicy RemoteSigned -Scope CurrentUser"
+                    fi
+                    ;;
+            esac
+        fi
+        
+        # Install uv
         powershell -Command "irm https://astral.sh/uv/install.ps1 | iex"
         install_result=$?
     else
@@ -301,20 +346,43 @@ else
         echo "✓ uv installed successfully"
         
         # Add uv to PATH for current session if needed
-        if [ -d "$HOME/.cargo/bin" ] && [[ ":$PATH:" != *":$HOME/.cargo/bin:"* ]]; then
-            export PATH="$HOME/.cargo/bin:$PATH"
-            echo "Added $HOME/.cargo/bin to PATH for this session"
+        if [ -n "$USERPROFILE" ]; then
+            # Windows: uv installs to %USERPROFILE%\.local\bin
+            UV_BIN_DIR="$USERPROFILE/.local/bin"
+            if [ -d "$UV_BIN_DIR" ] && [[ ":$PATH:" != *":$UV_BIN_DIR:"* ]]; then
+                export PATH="$UV_BIN_DIR:$PATH"
+                echo "Added $UV_BIN_DIR to PATH for this session"
+            fi
+        else
+            # Unix/macOS: uv installs to ~/.cargo/bin
+            if [ -d "$HOME/.cargo/bin" ] && [[ ":$PATH:" != *":$HOME/.cargo/bin:"* ]]; then
+                export PATH="$HOME/.cargo/bin:$PATH"
+                echo "Added $HOME/.cargo/bin to PATH for this session"
+            fi
         fi
         
-        # Verify uvx is now available
-        if command -v uvx &> /dev/null; then
-            echo "✓ uvx is now available"
+        # Verify uvx installation
+        if [ -n "$USERPROFILE" ]; then
+            # On Windows, check if uvx.exe exists (we'll use full path in MCP config)
+            WIN_USERPROFILE=$(powershell -Command "[Environment]::GetFolderPath('UserProfile')" 2>/dev/null | tr -d '\r\n')
+            if [ -n "$WIN_USERPROFILE" ]; then
+                UVX_WIN_PATH="${WIN_USERPROFILE}\\.local\\bin\\uvx.exe"
+                UVX_EXISTS=$(powershell -Command "Test-Path '$UVX_WIN_PATH'" 2>/dev/null | tr -d '\r\n')
+                if [ "$UVX_EXISTS" = "True" ]; then
+                    echo "✓ uvx installed at: $UVX_WIN_PATH"
+                    echo "  (Will be used via full path in MCP configuration)"
+                else
+                    echo "WARNING: uvx.exe not found at expected location"
+                fi
+            fi
         else
-            echo "WARNING: uvx was installed but is not in PATH"
-            echo "You may need to restart your terminal or add ~/.cargo/bin to your PATH"
-            echo ""
-            echo "Add this to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
-            echo '  export PATH="$HOME/.cargo/bin:$PATH"'
+            # Unix/macOS: verify it's in PATH
+            if command -v uvx &> /dev/null; then
+                echo "✓ uvx is now available"
+            else
+                echo "WARNING: uvx was installed but is not in PATH"
+                echo "You may need to restart your terminal or add ~/.cargo/bin to your PATH"
+            fi
         fi
     else
         echo "ERROR: Failed to install uv"
@@ -336,6 +404,49 @@ fi
 echo ""
 echo "Configuring Skillz MCP server..."
 
+# Determine the correct uvx command path
+UVX_CMD="uvx"
+if [ -n "$USERPROFILE" ]; then
+    # On Windows, always use full path if uvx.exe exists in .local/bin
+    # (VS Code may not have the same PATH as the current shell session)
+    # Get Windows path format of USERPROFILE using PowerShell
+    WIN_USERPROFILE=$(powershell -Command "[Environment]::GetFolderPath('UserProfile')" 2>/dev/null | tr -d '\r\n')
+    
+    if [ -n "$WIN_USERPROFILE" ]; then
+        # Check if uvx.exe exists using PowerShell (more reliable on Windows)
+        UVX_WIN_PATH="${WIN_USERPROFILE}\\.local\\bin\\uvx.exe"
+        UVX_EXISTS=$(powershell -Command "Test-Path '$UVX_WIN_PATH'" 2>/dev/null | tr -d '\r\n')
+        
+        if [ "$UVX_EXISTS" = "True" ]; then
+            UVX_CMD="$UVX_WIN_PATH"
+            echo "Using full path to uvx: $UVX_CMD"
+        fi
+    else
+        # Fallback: try to construct path from USERPROFILE variable
+        UVX_PATH_UNIX="$USERPROFILE/.local/bin/uvx.exe"
+        if [ -f "$UVX_PATH_UNIX" ]; then
+            # Convert USERPROFILE to Windows format
+            if echo "$USERPROFILE" | grep -q '^[A-Z]:'; then
+                # Already in Windows format
+                UVX_CMD="$USERPROFILE\\.local\\bin\\uvx.exe"
+            elif echo "$USERPROFILE" | grep -q '^/[a-z]'; then
+                # Git Bash format: /c/Users/... -> C:\Users\...
+                DRIVE_LETTER=$(echo "$USERPROFILE" | sed 's|^/\([a-z]\)|\1|' | cut -c1 | tr '[:lower:]' '[:upper:]')
+                REST_PATH=$(echo "$USERPROFILE" | sed 's|^/[a-z]||' | sed 's|/|\\|g')
+                UVX_CMD="${DRIVE_LETTER}:${REST_PATH}\\.local\\bin\\uvx.exe"
+            fi
+            echo "Using full path to uvx: $UVX_CMD"
+        fi
+    fi
+else
+    # On Unix/macOS, use full path if uvx is not in PATH but exists at ~/.cargo/bin/uvx
+    # (for consistency and reliability, even though PATH usually works)
+    if ! command -v uvx &> /dev/null && [ -f "$HOME/.cargo/bin/uvx" ]; then
+        UVX_CMD="$HOME/.cargo/bin/uvx"
+        echo "Using full path to uvx: $UVX_CMD"
+    fi
+fi
+
 # Check if VS Code CLI is available
 if command -v code &> /dev/null; then
     # Check if skillz is already configured
@@ -343,11 +454,32 @@ if command -v code &> /dev/null; then
     MCP_CONFIG_PATH="$VSCODE_DIR/mcp.json"
     
     if [ -f "$MCP_CONFIG_PATH" ] && grep -q '"skillz"' "$MCP_CONFIG_PATH" 2>/dev/null; then
-        echo "Skillz MCP server is already configured"
+        # Check if it's using just "uvx" instead of full path (needs update if we determined a full path)
+        if [ "$UVX_CMD" != "uvx" ] && grep -q '"command"[[:space:]]*:[[:space:]]*"uvx"' "$MCP_CONFIG_PATH" 2>/dev/null; then
+            echo "Skillz MCP server is configured but using 'uvx' instead of full path"
+            echo "Updating configuration to use full path..."
+            
+            # Update the mcp.json file to use the full path
+            UVX_CMD_JSON=$(echo "$UVX_CMD" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
+            # Create a temporary file with the updated content
+            if command -v mktemp &> /dev/null; then
+                TEMP_MCP=$(mktemp)
+            else
+                # Fallback for systems without mktemp (use a fixed temp name)
+                TEMP_MCP="${MCP_CONFIG_PATH}.tmp"
+            fi
+            sed "s|\"command\"[[:space:]]*:[[:space:]]*\"uvx\"|\"command\": \"$UVX_CMD_JSON\"|g" "$MCP_CONFIG_PATH" > "$TEMP_MCP"
+            mv "$TEMP_MCP" "$MCP_CONFIG_PATH"
+            echo "Updated MCP configuration to use full path: $UVX_CMD"
+        else
+            echo "Skillz MCP server is already configured"
+        fi
     else
         # Use VS Code CLI to add the MCP server
         echo "Adding Skillz MCP server using VS Code CLI..."
-        if code --add-mcp "{\"name\":\"skillz\",\"command\":\"uvx\",\"args\":[\"skillz@latest\"]}" 2>/dev/null; then
+        # Escape the command for JSON
+        UVX_CMD_ESCAPED=$(echo "$UVX_CMD" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
+        if code --add-mcp "{\"name\":\"skillz\",\"command\":\"$UVX_CMD_ESCAPED\",\"args\":[\"skillz@latest\"]}" 2>/dev/null; then
             echo "Successfully added Skillz MCP server"
         else
             echo "Note: VS Code CLI method failed, creating config file manually..."
@@ -359,17 +491,18 @@ if command -v code &> /dev/null; then
                 echo "MCP configuration exists at: $MCP_CONFIG_PATH"
                 echo "Please manually add Skillz server to your mcp.json:"
                 echo ""
-                echo '  "skillz": {'
-                echo '    "command": "uvx",'
-                echo '    "args": ["skillz@latest"]'
-                echo '  }'
+                echo "  \"skillz\": {"
+                echo "    \"command\": \"$UVX_CMD\","
+                echo "    \"args\": [\"skillz@latest\"]"
+                echo "  }"
             else
-                # Create new mcp.json
-                cat > "$MCP_CONFIG_PATH" << 'EOF'
+                # Create new mcp.json with proper escaping
+                UVX_CMD_JSON=$(echo "$UVX_CMD" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
+                cat > "$MCP_CONFIG_PATH" << EOF
 {
   "servers": {
     "skillz": {
-      "command": "uvx",
+      "command": "$UVX_CMD_JSON",
       "args": ["skillz@latest"]
     }
   }
@@ -388,23 +521,43 @@ else
     
     if [ -f "$MCP_CONFIG_PATH" ]; then
         if grep -q '"skillz"' "$MCP_CONFIG_PATH" 2>/dev/null; then
-            echo "Skillz is already configured in: $MCP_CONFIG_PATH"
+            # Check if it's using just "uvx" instead of full path (needs update if we determined a full path)
+            if [ "$UVX_CMD" != "uvx" ] && grep -q '"command"[[:space:]]*:[[:space:]]*"uvx"' "$MCP_CONFIG_PATH" 2>/dev/null; then
+                echo "Skillz is configured but using 'uvx' instead of full path"
+                echo "Updating configuration to use full path..."
+                
+                # Update the mcp.json file to use the full path
+                UVX_CMD_JSON=$(echo "$UVX_CMD" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
+                # Create a temporary file with the updated content
+                if command -v mktemp &> /dev/null; then
+                    TEMP_MCP=$(mktemp)
+                else
+                    # Fallback for systems without mktemp (use a fixed temp name)
+                    TEMP_MCP="${MCP_CONFIG_PATH}.tmp"
+                fi
+                sed "s|\"command\"[[:space:]]*:[[:space:]]*\"uvx\"|\"command\": \"$UVX_CMD_JSON\"|g" "$MCP_CONFIG_PATH" > "$TEMP_MCP"
+                mv "$TEMP_MCP" "$MCP_CONFIG_PATH"
+                echo "Updated MCP configuration to use full path: $UVX_CMD"
+            else
+                echo "Skillz is already configured in: $MCP_CONFIG_PATH"
+            fi
         else
             echo "MCP configuration exists at: $MCP_CONFIG_PATH"
             echo "Please manually add Skillz server to the 'servers' section:"
             echo ""
-            echo '  "skillz": {'
-            echo '    "command": "uvx",'
-            echo '    "args": ["skillz@latest"]'
-            echo '  }'
+            echo "  \"skillz\": {"
+            echo "    \"command\": \"$UVX_CMD\","
+            echo "    \"args\": [\"skillz@latest\"]"
+            echo "  }"
         fi
     else
-        # Create new mcp.json
-        cat > "$MCP_CONFIG_PATH" << 'EOF'
+        # Create new mcp.json with proper escaping
+        UVX_CMD_JSON=$(echo "$UVX_CMD" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g')
+        cat > "$MCP_CONFIG_PATH" << EOF
 {
   "servers": {
     "skillz": {
-      "command": "uvx",
+      "command": "$UVX_CMD_JSON",
       "args": ["skillz@latest"]
     }
   }
